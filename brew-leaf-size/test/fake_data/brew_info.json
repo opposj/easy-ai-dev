@@ -1,0 +1,12 @@
+{
+  "formulae": [
+    {"name": "f1", "dependencies": ["d1", "d2", "ghost"], "recommended_dependencies": []},
+    {"name": "fn", "dependencies": ["d1", "d3"], "recommended_dependencies": []},
+    {"name": "d1", "dependencies": ["d2"], "recommended_dependencies": []},
+    {"name": "d2", "dependencies": [], "recommended_dependencies": []},
+    {"name": "d3", "dependencies": [], "recommended_dependencies": []},
+    {"name": "f2", "dependencies": [], "recommended_dependencies": ["d3"]},
+    {"name": "empty", "dependencies": [], "recommended_dependencies": []}
+  ],
+  "casks": []
+}
