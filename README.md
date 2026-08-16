@@ -1,4 +1,7 @@
-Build and run: `docker build -t ai-dev . && docker run -it --rm --privileged ai-dev`
+### Start 
+- **Build:** `docker build [--build-arg TIER={lite|default|full}] -t ai-dev[:{lite|default|full}] .`
+- **Run:** `docker run -it --rm --privileged ai-dev[:{lite|default|full}]`
+- By default, `full` profile is chosen
 
 ### C
 
@@ -71,6 +74,12 @@ Build and run: `docker build -t ai-dev . && docker run -it --rm --privileged ai-
 - **Command:** `elixir -e 'IO.puts("Hello")'`
 - **Style:** Interpreted, via `-e` eval
 - **stdin?** No — source via `-e` flag
+
+### Erlang
+
+- **Command:** `erl -noshell -eval 'io:format("Hello~n"), halt().'`
+- **Style:** Compiled, via `-eval` flag
+- **stdin?** No — source via `-eval` flag
 
 ### Perl
 

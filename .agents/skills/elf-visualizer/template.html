@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ELF Visualization</title>
+<style>
+  :root {
+    --hdr: #ff8a65; --phdr: #ba68c8; --pad: #cfd8dc; --rodata: #ffd54f;
+    --ehhdr: #a5d6a7; --ehframe: #81c784; --text: #ef5350; --zeros: #e0e0e0;
+    --comment: #90caf9; --shstrtab: #4db6ac; --shdr: #9575cd; --bss: #4dd0e1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Cascadia Code", Consolas, "Segoe UI", monospace;
+    background: #1e1e2e; color: #e0e0e0; margin: 0; padding: 32px;
+    display: flex; justify-content: center;
+  }
+  .wrap { max-width: 1100px; width: 100%; }
+  h1 { font-size: 20px; color: #fff; margin: 0 0 4px; }
+  .subtitle { font-size: 12px; color: #a0a0b0; margin-bottom: 24px; }
+  h2 { font-size: 16px; color: #fff; margin: 0 0 4px; }
+  .sub { font-size: 12px; color: #889; margin-bottom: 14px; }
+  .note { font-size: 12px; color: #889; margin-top: 20px; line-height: 1.6; }
+  .gapnote { color: #667; font-size: 11px; padding: 4px 14px; text-align: center; margin-bottom: 6px; }
+  .stack { display: flex; align-items: flex-start; }
+  .file {
+    width: 180px; flex-shrink: 0; border: 2px solid #fff; border-radius: 6px;
+    overflow: hidden; background: #2a2a3c;
+  }
+  .seg {
+    display: flex; align-items: center; justify-content: center;
+    border-bottom: 1px solid rgba(255,255,255,.25); font-size: 10px;
+    text-align: center; line-height: 1.25; padding: 2px; color: #111; font-weight: 600;
+    min-height: 30px; overflow: hidden;
+  }
+  .seg:last-child { border-bottom: none; }
+  .annotations {
+    flex: 1; margin-left: 16px; display: flex; flex-direction: column;
+    max-height: 560px; overflow-y: auto; padding-right: 8px;
+  }
+  .ann {
+    border-left: 3px solid #555; padding: 10px 14px; font-size: 13px;
+    background: #242436; border-radius: 0 6px 6px 0; display: flex;
+    flex-direction: column; margin-bottom: 6px;
+  }
+  .ann .title { font-weight: 700; color: #fff; font-size: 13px; }
+  .ann .meta { color: #8ab4f8; font-size: 11px; margin: 2px 0 4px; }
+  .ann .desc { color: #c0c0d0; font-size: 12px; line-height: 1.5; }
+  .ann .offset { color: #9aa; }
+  .ann .map { color: #c792ea; font-size: 11px; margin-top: 4px; }
+  .fields { margin-top: 8px; font-size: 11px; line-height: 1.45; }
+  .field { padding: 2px 0; border-bottom: 1px dashed #333; }
+  .field:last-child { border-bottom: none; }
+  .field .fo { color: #889; margin-right: 6px; }
+  .field .fn { color: #fff; font-weight: 600; margin-right: 6px; }
+  .field .fv { color: #8ab4f8; }
+  .field .fnote { color: #889; }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 14px;
+    padding: 10px 12px; background: #242436; border-radius: 6px; max-width: 100%;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #ccc; white-space: nowrap; }
+  .legend i { width: 12px; height: 12px; display: inline-block; border-radius: 2px; }
+  .bgrid {
+    padding: 8px; background: #14141f; border: 1px solid #3a3a50; border-radius: 6px;
+    width: max-content; overflow-x: auto; max-width: 100%;
+  }
+  .brow { display: flex; margin-bottom: 1px; }
+  .browlabel {
+    width: 60px; flex-shrink: 0; text-align: right; padding-right: 8px;
+    font-size: 9px; color: #889; line-height: 19px; user-select: none;
+  }
+  .bcell {
+    width: 19px; height: 19px; flex-shrink: 0; cursor: default; border-radius: 1px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700; color: #111; border: 1px solid rgba(0,0,0,.18);
+  }
+  .bcell:hover { outline: 1px solid #fff; z-index: 1; position: relative; }
+  .memview { margin-top: 56px; border-top: 1px solid #3a3a50; padding-top: 28px; }
+  .memview .browlabel { width: 76px; }
+  .mpage {
+    margin: 10px 0 2px; padding: 3px 8px; font-size: 10px; color: #d0d0e0;
+    font-weight: 700; background: #1c1c2c; border-radius: 4px; display: inline-block;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="h1">ELF Visualization</h1>
+  <div class="subtitle" id="subtitle"></div>
+  <div id="fileview"></div>
+  <div id="memview" class="memview"></div>
+</div>
+
+<script src="elf_bytes.js"></script>
+<script>
+"use strict";
+
+/* ===================== EDIT THIS DATA ===================== */
+var BINARY_NAME = "write_example";
+var FILESIZE  = 0x1338;      // total file size in bytes (4920)
+var ENTRY     = 0x100136c;   // entry point virtual address
+var MEM_BASE  = 0x1000000;   // lowest mapped virtual address
+var MEM_SIZE  = 0x6000;      // bytes of address space to render (6 pages)
+var COLS = 64;
+var META = "x86-64 little-endian EXEC · statically linked, stripped";
+
+// File regions + their memory placement — the single source of truth.
+//   from,to : file offsets (inclusive). Set both to null for NOBITS (memory-only) sections.
+//   addr    : virtual address of the first byte (0 or null = not loaded into memory).
+//   size    : in-memory byte size (NOBITS only; PROGBITS size is derived from from/to).
+//   type    : ELF section type (PROGBITS, NOBITS, STRTAB, SYMTAB, ...) or "header".
+//   flags   : ELF flags string ("AX", "A", "W", "MS", "AMS", ...) or "".
+// File regions MUST tile 0x0000..FILESIZE-1; uncovered gaps are auto-labeled "Padding".
+var SECTIONS = [
+  { name: "ELF Header",      from: 0x0000, to: 0x003F, addr: 0x1000000, color: "var(--hdr)",      type: "header",   flags: "" },
+  { name: "Program Headers", from: 0x0040, to: 0x0237, addr: 0x1000040, color: "var(--phdr)",     type: "header",   flags: "" },
+  { name: ".rodata",         from: 0x0238, to: 0x0256, addr: 0x1000238, color: "var(--rodata)",   type: "PROGBITS", flags: "AMS" },
+  { name: ".eh_frame_hdr",   from: 0x0258, to: 0x0293, addr: 0x1000258, color: "var(--ehhdr)",    type: "PROGBITS", flags: "A" },
+  { name: ".eh_frame",       from: 0x0298, to: 0x036B, addr: 0x1000298, color: "var(--ehframe)",  type: "PROGBITS", flags: "A" },
+  { name: ".text",           from: 0x036C, to: 0x0660, addr: 0x100136c, color: "var(--text)",     type: "PROGBITS", flags: "AX" },
+  { name: ".comment",        from: 0x1000, to: 0x101B, addr: 0,          color: "var(--comment)",  type: "PROGBITS", flags: "MS" },
+  { name: ".shstrtab",       from: 0x101C, to: 0x1074, addr: 0,          color: "var(--shstrtab)", type: "STRTAB",   flags: "" },
+  { name: "Section Headers", from: 0x1078, to: 0x1337, addr: 0,          color: "var(--shdr)",     type: "header",   flags: "" },
+  { name: ".relro_padding",  addr: 0x1002668, size: 0x0998, color: "var(--pad)", type: "NOBITS", flags: "WA" },
+  { name: ".bss",            addr: 0x1004000, size: 0x2000, color: "var(--bss)", type: "NOBITS", flags: "WA" }
+];
+
+// LOAD segments (from `readelf -lW`, page-aligned). Used only to classify
+// memory as file-backed / zero-fill / unmapped and to attach permissions.
+var SEGMENTS = [
+  { perm: "R--", vaddr: 0x1000000, memsz: 0x1000 },
+  { perm: "R-X", vaddr: 0x1001000, memsz: 0x1000 },
+  { perm: "RW-", vaddr: 0x1002000, memsz: 0x1000 },
+  { perm: "RW-", vaddr: 0x1004000, memsz: 0x2000 }
+];
+/* ======================================================== */
+
+// Process-level memory beyond the program image: the TLS template, the (empty)
+// GOT, the call stack, and the kernel [vvar]/[vdso] mappings. Addresses come from
+// `gdb -ex 'info proc mappings'` — they are ASLR-randomized and change on every
+// run; the values below are from one actual run.
+var PROCESS = [
+  { name: ".tbss (TLS)", vaddr: 0x1001661, size: 0, perm: "---", color: "#00acc1",
+    note: "declared 256 KiB template — not mapped",
+    desc: "PT_TLS declares a 256 KiB zero-filled TLS template, but this process never allocates a TLS block: fs_base = 0x0 because the program uses no thread-local storage." },
+  { name: ".got",        vaddr: 0x1002668, size: 0, perm: "RW-", color: "#ab47bc",
+    desc: "Global Offset Table — empty (0 B) because this binary is statically linked." },
+  { name: "[vvar]",      vaddr: 0x72c07c890000, size: 0x4000, perm: "R--", color: "#78909c",
+    desc: "Kernel-exported read-only variables (time, CPU info), mapped into every process." },
+  { name: "[vvar_vclock]", vaddr: 0x72c07c894000, size: 0x2000, perm: "R--", color: "#90a4ae",
+    desc: "The kernel's read-only virtual-clock data, used for fast gettimeofday()." },
+  { name: "[vdso]",      vaddr: 0x72c07c896000, size: 0x2000, perm: "R-X", color: "#26a69a",
+    desc: "A tiny kernel-injected library that turns system calls into fast function calls." },
+  { name: "stack",       vaddr: 0x7ffca6e99000, size: 0x21000, perm: "RW-", color: "#7e57c2",
+    desc: "The call stack — grows downward as functions nest; non-executable (NX)." }
+];
+
+var GAP = "#3a3a50";
+var PERM_COLOR = { "R--": "#81c784", "R-X": "#ef5350", "RW-": "#64b5f6" };
+// Section descriptions — explain what each section's bytes ARE and what they're for.
+// (Generic ELF knowledge; the specific byte fields of the headers are decoded below.)
+var NAME_DESC = {
+  "ELF Header": "The first 64 bytes are the file's identity card: 32/64-bit class, endianness, target OS and CPU, the entry point, and where the two header tables live. Decoded field-by-field below.",
+  "Program Headers": "The loader's map — each 56-byte entry tells the OS which file bytes to place at which virtual address with which R/W/X permissions. This is exactly what the memory view renders. Decoded below.",
+  "Section Headers": "A table (64 bytes per entry) describing every section's file offset, size, address and flags. Used by linkers and tools; the runtime loader ignores it.",
+  ".text": "The machine code — the actual CPU instructions executed at runtime.",
+  ".rodata": "Read-only data: string literals and constants the program reads but must not write.",
+  ".data": "Global variables with non-zero initial values, stored verbatim in the file and copied to writable memory.",
+  ".bss": "Global variables that start at zero. Stores no file bytes — the loader zeroes this memory at startup.",
+  ".tbss": "Like .bss but per-thread: zero-initialized thread-local storage.",
+  ".got": "Global Offset Table — pointers the dynamic linker fills in so position-independent code can reach globals/functions.",
+  ".relro_padding": "Zero padding that rounds the RELRO region to a page boundary so those pages can be locked read-only after relocation.",
+  ".eh_frame": "Unwind tables — records describing how to walk the call stack (for exceptions and backtraces).",
+  ".eh_frame_hdr": "A sorted index into .eh_frame for fast stack-unwinder lookup.",
+  ".comment": "A plain-text toolchain note (compiler name/version). Metadata only — never loaded into memory.",
+  ".shstrtab": "The string table that stores every section's name.",
+  ".strtab": "A string table (symbol names, etc.).",
+  ".symtab": "Symbol table — names, types and addresses of functions and globals, for linking/debugging.",
+  "Padding": "Alignment bytes that don't belong to any section."
+};
+
+var TYPE_DESC = {
+  "PROGBITS": "The section's content is stored directly in the file (code or data).",
+  "NOBITS": "Reserves memory but stores no file bytes — zero-filled when loaded.",
+  "STRTAB": "A string table — a run of NUL-terminated strings.",
+  "SYMTAB": "A symbol table — entries naming and locating functions/globals.",
+  "RELA": "Relocation records (with explicit addends).",
+  "REL": "Relocation records."
+};
+
+function describe(s) {
+  if (NAME_DESC[s.name]) return NAME_DESC[s.name];
+  if (s.type === "PROGBITS" && /X/.test(s.flags || "")) return "Executable machine code.";
+  if (s.type === "PROGBITS" && /W/.test(s.flags || "")) return "Writable data.";
+  if (s.type === "PROGBITS") return "Read-only data.";
+  return TYPE_DESC[s.type] || "";
+}
+
+function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
+function hex4(n) { return "0x" + n.toString(16).toUpperCase().padStart(4, "0"); }
+function hexAddr(n) { return "0x" + n.toString(16).toUpperCase().padStart(7, "0"); }
+function asciiChar(hexByte) {
+  var n = parseInt(hexByte, 16);
+  return (n >= 0x20 && n <= 0x7e) ? String.fromCharCode(n) : "·";
+}
+
+/* ---- ELF header / program-header decoders (standard spec, driven by the actual bytes) ---- */
+var ELF_CLASS   = { "1": "ELF32 (32-bit)", "2": "ELF64 (64-bit)" };
+var ELF_DATA    = { "1": "little-endian", "2": "big-endian" };
+var ELF_OSABI   = { "0": "System V", "2": "NetBSD", "3": "Linux", "6": "Solaris", "9": "FreeBSD" };
+var ELF_TYPE    = { "1": "REL — relocatable object", "2": "EXEC — executable", "3": "DYN — shared object / PIE", "4": "CORE — core dump" };
+var ELF_MACHINE = { "3": "x86 (i386)", "40": "ARM", "62": "x86-64 (AMD64)", "183": "AArch64", "243": "RISC-V" };
+var PHDR_TYPE   = { "1": "LOAD", "2": "DYNAMIC", "3": "INTERP", "4": "NOTE", "6": "PHDR", "7": "TLS",
+                    "1685382480": "GNU_EH_FRAME", "1685382481": "GNU_STACK", "1685382482": "GNU_RELRO" };
+
+function hexBytes(off, n) {
+  var out = [];
+  for (var i = 0; i < n; i++) out.push(ELF_HEX.substr((off + i) * 2, 2).toUpperCase());
+  return out.join(" ");
+}
+function u8(off)  { return parseInt(ELF_HEX.substr(off * 2, 2), 16) || 0; }
+function u16(off) { return u8(off) | (u8(off + 1) << 8); }
+function u32(off) { return (u16(off) >>> 0) + u16(off + 2) * 0x10000; }
+function u64(off) { return u32(off) + u32(off + 4) * 0x100000000; } // display only; fine for values < 2^53
+function permOf(flags) { return ((flags & 4) ? "R" : "-") + ((flags & 2) ? "W" : "-") + ((flags & 1) ? "X" : "-"); }
+
+function elfHeaderFields() {
+  var is64 = u8(0x04) === 2;
+  var ptr = is64 ? u64 : u32;
+  return [
+    { off: 0x00, label: "Magic",           value: hexBytes(0x00, 4),                 note: "0x7f 'E' 'L' 'F' — the signature of every ELF file." },
+    { off: 0x04, label: "Class",           value: ELF_CLASS[u8(0x04)] || u8(0x04),   note: "Address size: 32-bit or 64-bit." },
+    { off: 0x05, label: "Endianness",      value: ELF_DATA[u8(0x05)] || u8(0x05),    note: "Byte order of every multi-byte number that follows." },
+    { off: 0x06, label: "Version",         value: u8(0x06),                          note: "ELF format version (always 1)." },
+    { off: 0x07, label: "OS/ABI",          value: ELF_OSABI[u8(0x07)] || u8(0x07),   note: "The operating system this file targets." },
+    { off: 0x08, label: "ABI version",     value: u8(0x08),                          note: "ABI revision (usually 0)." },
+    { off: 0x10, label: "Type",            value: ELF_TYPE[u16(0x10)] || u16(0x10),  note: "Kind of file: executable, library, relocatable object…" },
+    { off: 0x12, label: "Machine",         value: ELF_MACHINE[u16(0x12)] || u16(0x12), note: "CPU architecture this code targets." },
+    { off: 0x14, label: "Version",         value: u32(0x14),                         note: "Version number (always 1)." },
+    { off: 0x18, label: "Entry point",     value: hexAddr(ptr(0x18)),                note: "Virtual address where the CPU starts executing." },
+    { off: 0x20, label: "Prog hdr offset", value: hexAddr(ptr(0x20)),                note: "File offset of the program header table." },
+    { off: 0x28, label: "Sect hdr offset", value: hexAddr(ptr(0x28)),                note: "File offset of the section header table." },
+    { off: 0x30, label: "Flags",           value: u32(0x30),                         note: "Architecture-specific flags (usually 0)." },
+    { off: 0x34, label: "ELF hdr size",    value: u16(0x34),                         note: "Size of this header, in bytes (64)." },
+    { off: 0x36, label: "Prog hdr size",   value: u16(0x36),                         note: "Bytes per program header entry." },
+    { off: 0x38, label: "Prog hdr count",  value: u16(0x38),                         note: "Number of program header entries." },
+    { off: 0x3A, label: "Sect hdr size",   value: u16(0x3A),                         note: "Bytes per section header entry." },
+    { off: 0x3C, label: "Sect hdr count",  value: u16(0x3C),                         note: "Number of section header entries." },
+    { off: 0x3E, label: "Sect name idx",   value: u16(0x3E),                         note: "Section index that stores all section names." }
+  ];
+}
+
+function elfProgramHeaders() {
+  if (u8(0x04) !== 2) return null; // 64-bit layout only for now
+  var e_phoff = u64(0x20), e_phentsize = u16(0x36), e_phnum = u16(0x38);
+  var out = [];
+  for (var i = 0; i < e_phnum; i++) {
+    var o = e_phoff + i * e_phentsize;
+    out.push({
+      type: PHDR_TYPE[u32(o)] || u32(o),
+      perm: permOf(u32(o + 4)),
+      off: u64(o + 8),
+      vaddr: u64(o + 16),
+      filesz: u64(o + 32),
+      memsz: u64(o + 40)
+    });
+  }
+  return out;
+}
+
+function renderFields(container, rows) {
+  var box = el("div", "fields");
+  rows.forEach(function (f) {
+    var row = el("div", "field");
+    var fo = el("span", "fo"); fo.textContent = hex4(f.off);
+    var fn = el("span", "fn"); fn.textContent = f.label;
+    var fv = el("span", "fv"); fv.textContent = String(f.value);
+    row.appendChild(fo); row.appendChild(fn); row.appendChild(fv);
+    var note = el("div", "fnote"); note.textContent = f.note;
+    row.appendChild(note);
+    box.appendChild(row);
+  });
+  container.appendChild(box);
+}
+
+function renderProgramHeaders(container) {
+  var phdrs = elfProgramHeaders();
+  if (!phdrs) return;
+  var box = el("div", "fields");
+  phdrs.forEach(function (p, i) {
+    var row = el("div", "field");
+    var fn = el("span", "fn"); fn.textContent = "[" + i + "] " + p.type;
+    var fv = el("span", "fv"); fv.textContent = p.perm;
+    row.appendChild(fn); row.appendChild(fv);
+    var note = el("div", "fnote");
+    if (p.filesz === 0) {
+      note.textContent = "no file bytes — " + p.memsz + " B zero-filled at mem " + hexAddr(p.vaddr) + "–" + hexAddr(p.vaddr + p.memsz - 1);
+    } else {
+      note.textContent = "file " + hex4(p.off) + "–" + hex4(p.off + p.filesz - 1) + " (" + p.filesz + " B)  →  mem " +
+        hexAddr(p.vaddr) + "–" + hexAddr(p.vaddr + p.memsz - 1) + " (" + p.memsz + " B)";
+    }
+    row.appendChild(note);
+    box.appendChild(row);
+  });
+  container.appendChild(box);
+}
+
+/* ---- file regions: tile 0x0000..FILESIZE-1, auto-label gaps ---- */
+function buildFileRegions() {
+  var secs = SECTIONS.filter(function (s) { return s.from != null; })
+                     .sort(function (a, b) { return a.from - b.from; });
+  var regions = [];
+  var cur = 0;
+  secs.forEach(function (s) {
+    if (s.from > cur) regions.push({ name: "Padding", from: cur, to: s.from - 1, color: "var(--pad)", type: "gap" });
+    regions.push(s);
+    cur = s.to + 1;
+  });
+  if (cur < FILESIZE) regions.push({ name: "Padding", from: cur, to: FILESIZE - 1, color: "var(--pad)", type: "gap" });
+  return regions;
+}
+
+/* ---- memory model ---- */
+function segAt(vaddr) {
+  for (var i = 0; i < SEGMENTS.length; i++) {
+    var g = SEGMENTS[i];
+    if (vaddr >= g.vaddr && vaddr < g.vaddr + g.memsz) return g;
+  }
+  return null;
+}
+
+var named = [];
+SECTIONS.forEach(function (s) {
+  if (!s.addr) return;
+  var sz = (s.from != null) ? (s.to - s.from + 1) : (s.size || 0);
+  if (sz <= 0) return;
+  var g = segAt(s.addr);
+  named.push({
+    kind: s.from != null ? "file" : "zero",
+    name: s.name, color: s.color, type: s.type, flags: s.flags,
+    vfrom: s.addr, vto: s.addr + sz - 1, fileFrom: s.from,
+    perm: g ? g.perm : "---"
+  });
+});
+named.sort(function (a, b) { return a.vfrom - b.vfrom; });
+
+function classify(vaddr) {
+  for (var i = 0; i < named.length; i++) {
+    var r = named[i];
+    if (vaddr >= r.vfrom && vaddr <= r.vto) return r;
+  }
+  var g = segAt(vaddr);
+  if (g) return { kind: "zero", name: "zero-fill", color: PERM_COLOR[g.perm] || "#64b5f6", perm: g.perm };
+  return { kind: "unmapped", name: "unmapped", color: "#1a1a28", perm: "---" };
+}
+
+function buildMemoryRegions() {
+  var regions = [];
+  var end = MEM_BASE + MEM_SIZE;
+  var start = MEM_BASE;
+  var cur = classify(start);
+  for (var a = start + 1; a < end; a++) {
+    var c = classify(a);
+    if (c.name !== cur.name || c.kind !== cur.kind || c.perm !== cur.perm) {
+      regions.push(region(cur, start, a - 1));
+      start = a; cur = c;
+    }
+  }
+  regions.push(region(cur, start, end - 1));
+  return regions;
+}
+function region(c, from, to) {
+  return { name: c.name, kind: c.kind, color: c.color, perm: c.perm,
+           vfrom: from, vto: to, fileFrom: c.fileFrom, type: c.type, flags: c.flags };
+}
+
+function memDesc(r) {
+  if (r.kind === "unmapped") return "No mapping here — any access faults (SIGSEGV).";
+  if (r.kind === "file") return describe(r);
+  if (r.name === "zero-fill") return "Anonymous zero-filled memory — allocated at load but not backed by file bytes.";
+  return describe(r) + " (NOBITS: zero-filled at load, not stored in the file).";
+}
+
+function addLegend(legend, color, text) {
+  var span = el("span"); var sw = el("i"); sw.style.background = color;
+  span.appendChild(sw); span.appendChild(document.createTextNode(text)); legend.appendChild(span);
+}
+
+function regionAt(regions, vaddr) {
+  for (var i = 0; i < regions.length; i++) {
+    var r = regions[i];
+    if (vaddr >= r.vfrom && vaddr <= r.vto) return r;
+  }
+  return null;
+}
+
+function renderProcessStack(file, anns) {
+  var regions = PROCESS.slice().sort(function (a, b) { return a.vaddr - b.vaddr; });
+  var prevEnd = MEM_BASE + MEM_SIZE - 1; // the program image above already covers up to here
+
+  regions.forEach(function (r) {
+    if (r.vaddr > prevEnd + 0x100000) {
+      var gap = el("div", "gapnote"); gap.textContent = "… unmapped gap (no access) …";
+      anns.appendChild(gap);
+      var gbar = el("div", "seg");
+      gbar.style.height = "24px";
+      gbar.style.background = "#1a1a28";
+      gbar.style.color = "#667";
+      gbar.innerHTML = "⋮";
+      file.appendChild(gbar);
+    }
+
+    var seg = el("div", "seg");
+    seg.style.height = (r.size === 0 ? 22 : 44) + "px";
+    seg.style.background = r.color;
+    seg.innerHTML = r.name.replace(/ /g, "<br>");
+    file.appendChild(seg);
+
+    var a = el("div", "ann");
+    var t = el("div", "title");
+    if (r.note) {
+      t.innerHTML = r.name + ' <span class="offset">' + r.note + '</span>';
+    } else if (r.size === 0) {
+      t.innerHTML = r.name + ' <span class="offset">at ' + hexAddr(r.vaddr) + " (0 B)</span>";
+    } else {
+      t.innerHTML = r.name + ' <span class="offset">' + hexAddr(r.vaddr) + " – " + hexAddr(r.vaddr + r.size - 1) + " (" + r.size + " B)</span>";
+    }
+    a.appendChild(t);
+    var m = el("div", "meta"); m.textContent = r.perm; a.appendChild(m);
+    var d = el("div", "desc"); d.textContent = r.desc; a.appendChild(d);
+    anns.appendChild(a);
+
+    prevEnd = r.vaddr + Math.max(0, r.size - 1);
+  });
+}
+
+/* ---- page setup ---- */
+document.title = "ELF Visualization — " + BINARY_NAME;
+document.getElementById("h1").textContent = "ELF Visualization — " + BINARY_NAME;
+var sub = BINARY_NAME + " · " + FILESIZE + " bytes (" + hex4(FILESIZE) + ") · entry " + hexAddr(ENTRY);
+if (META) sub += " · " + META;
+document.getElementById("subtitle").textContent = sub;
+/* ---------------- File view ---------------- */
+(function renderFileView() {
+  var wrap = document.getElementById("fileview");
+  var regions = buildFileRegions();
+  var scale = 520 / FILESIZE;
+
+  var stack = el("div", "stack");
+  var file = el("div", "file");
+  var anns = el("div", "annotations");
+
+  regions.forEach(function (s) {
+    var h = Math.max(30, Math.round((s.to - s.from + 1) * scale));
+    var seg = el("div", "seg");
+    seg.style.height = h + "px";
+    seg.style.background = s.color;
+    seg.innerHTML = s.name.replace(/ /g, "<br>");
+    file.appendChild(seg);
+
+    var a = el("div", "ann");
+    var t = el("div", "title");
+    t.innerHTML = s.name + ' <span class="offset">' + hex4(s.from) + " – " + hex4(s.to) +
+      " (" + (s.to - s.from + 1) + "B)</span>";
+    a.appendChild(t);
+
+    var mp = [];
+    if (s.type && s.type !== "gap" && s.type !== "header") mp.push(s.type);
+    if (s.flags) mp.push(s.flags);
+    if (s.addr) mp.push("loaded → " + hexAddr(s.addr));
+    else if (s.type !== "gap") mp.push("not loaded");
+    if (mp.length) { var m = el("div", "meta"); m.textContent = mp.join(" · "); a.appendChild(m); }
+
+    var d = el("div", "desc"); d.textContent = describe(s); a.appendChild(d);
+    if (s.name === "ELF Header") renderFields(a, elfHeaderFields());
+    if (s.name === "Program Headers") renderProgramHeaders(a);
+    anns.appendChild(a);
+  });
+  stack.appendChild(file);
+  stack.appendChild(anns);
+  wrap.appendChild(stack);
+
+  var legend = el("div", "legend");
+  var seen = {};
+  regions.forEach(function (s) {
+    if (seen[s.name]) return;
+    seen[s.name] = true;
+    addLegend(legend, s.color, s.name);
+  });
+  wrap.appendChild(legend);
+
+  var grid = el("div", "bgrid");
+  var frag = document.createDocumentFragment();
+  var row = null;
+  for (var off = 0; off < FILESIZE; off++) {
+    if (off % COLS === 0) {
+      row = el("div", "brow");
+      var lbl = el("div", "browlabel"); lbl.textContent = hex4(off);
+      row.appendChild(lbl); frag.appendChild(row);
+    }
+    var s = null;
+    for (var i = 0; i < regions.length; i++) {
+      if (off >= regions[i].from && off <= regions[i].to) { s = regions[i]; break; }
+    }
+    var cell = el("div", "bcell");
+    cell.style.background = s ? s.color : GAP;
+    var v = ELF_HEX.substr(off * 2, 2);
+    cell.textContent = v;
+    cell.title = (s ? s.name : "unused") + " — " + hex4(off) + " = 0x" + v + "  '" + asciiChar(v) + "'";
+    row.appendChild(cell);
+  }
+  grid.appendChild(frag);
+  wrap.appendChild(grid);
+})();
+/* ---------------- Memory view ---------------- */
+(function renderMemoryView() {
+  var wrap = document.getElementById("memview");
+  var regions = buildMemoryRegions();
+  var scale = 520 / MEM_SIZE;
+
+  var h2 = el("h2"); h2.textContent = "Memory-loaded view — full process address space";
+  var sub = el("div", "sub");
+  sub.textContent = "The whole process, from its lowest mapped page (0x1000000) up to the call stack: the program image's file-backed and zero-fill pages, then the kernel [vvar]/[vdso] mappings and the stack at randomized high addresses. The ⋮ bars collapse the huge unmapped gaps. Addresses are from one real gdb run (ASLR — they change every run).";
+  wrap.appendChild(h2); wrap.appendChild(sub);
+
+  var stack = el("div", "stack");
+  var file = el("div", "file");
+  var anns = el("div", "annotations");
+
+  regions.forEach(function (r) {
+    var h = Math.max(30, Math.round((r.vto - r.vfrom + 1) * scale));
+    var seg = el("div", "seg");
+    seg.style.height = h + "px";
+    seg.style.background = r.color;
+    if (r.kind === "unmapped") seg.style.color = "#777";
+    seg.innerHTML = r.name.replace(/ /g, "<br>");
+    file.appendChild(seg);
+
+    var a = el("div", "ann");
+    var t = el("div", "title");
+    t.innerHTML = r.name + ' <span class="offset">' + hexAddr(r.vfrom) + " – " + hexAddr(r.vto) +
+      " (" + (r.vto - r.vfrom + 1) + "B)</span>";
+    a.appendChild(t);
+
+    var m = el("div", "meta");
+    m.textContent = (r.perm || "---") + (r.kind === "file" ? " · file-backed" : r.kind === "unmapped" ? " · unmapped" : " · zero-fill");
+    a.appendChild(m);
+
+    if (r.kind === "file") {
+      var mp = el("div", "map");
+      mp.textContent = "file " + hex4(r.fileFrom) + "–" + hex4(r.fileFrom + (r.vto - r.vfrom)) +
+        "  →  mem " + hexAddr(r.vfrom) + "–" + hexAddr(r.vto);
+      a.appendChild(mp);
+    }
+
+    var d = el("div", "desc"); d.textContent = memDesc(r); a.appendChild(d);
+    anns.appendChild(a);
+  });
+
+  renderProcessStack(file, anns);
+
+  stack.appendChild(file);
+  stack.appendChild(anns);
+  wrap.appendChild(stack);
+
+  var legend = el("div", "legend");
+  var seen = {};
+  regions.forEach(function (r) {
+    if (r.name === "zero-fill" || r.name === "unmapped") return;
+    if (seen[r.name]) return;
+    seen[r.name] = true;
+    addLegend(legend, r.color, r.name);
+  });
+  addLegend(legend, "#64b5f6", "zero-fill (anonymous)");
+  addLegend(legend, "#1a1a28", "unmapped");
+  PROCESS.forEach(function (p) {
+    addLegend(legend, p.color, p.name);
+  });
+  wrap.appendChild(legend);
+
+  var grid = el("div", "bgrid");
+  var frag = document.createDocumentFragment();
+  var row = null;
+  var lastRegion = null;
+  for (var rel = 0; rel < MEM_SIZE; rel++) {
+    var vaddr = MEM_BASE + rel;
+    var r = regionAt(regions, vaddr);
+    if (r !== lastRegion) {
+      lastRegion = r;
+      var ph = el("div", "mpage");
+      ph.textContent = hexAddr(vaddr) + " · " + (r.perm || "---") + " · " + r.name;
+      frag.appendChild(ph);
+      row = null;
+    }
+    if (rel % COLS === 0 || row === null) {
+      row = el("div", "brow");
+      var lbl = el("div", "browlabel"); lbl.textContent = hexAddr(vaddr);
+      row.appendChild(lbl); frag.appendChild(row);
+    }
+    var cell = el("div", "bcell");
+    cell.style.background = r.color;
+    var value, title;
+    if (r.kind === "unmapped") {
+      value = "\u00b7";
+      cell.style.color = "#555";
+      title = "unmapped — " + hexAddr(vaddr) + " (SIGSEGV on access)";
+    } else if (r.kind === "file") {
+      var fo = r.fileFrom + (vaddr - r.vfrom);
+      value = ELF_HEX.substr(fo * 2, 2);
+      title = r.name + " — " + hexAddr(vaddr) + " (file " + hex4(fo) + ") = 0x" + value + "  '" + asciiChar(value) + "'";
+    } else {
+      value = "00";
+      title = r.name + " — " + hexAddr(vaddr) + " = 0x00 (zero-fill)";
+    }
+    cell.textContent = value;
+    cell.title = title;
+    row.appendChild(cell);
+  }
+  grid.appendChild(frag);
+  wrap.appendChild(grid);
+
+  var note = el("div", "note");
+  var notLoaded = SECTIONS.filter(function (s) { return s.from != null && !s.addr; }).map(function (s) { return s.name; });
+  var nobits = SECTIONS.filter(function (s) { return s.from == null; }).map(function (s) { return s.name; });
+  note.innerHTML = "<b>Not loaded into memory:</b> " + (notLoaded.length ? notLoaded.join(", ") : "none") +
+    " (linker/tool metadata present only in the file).<br>" +
+    "<b>Zero-filled at load (NOBITS):</b> " + (nobits.length ? nobits.join(", ") : "none") + ".";
+  wrap.appendChild(note);
+})();
+</script>
+</body>
+</html>
