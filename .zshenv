@@ -7,8 +7,9 @@ addpath() {
 }
 
 [[ -z $HOMEBREW_PREFIX ]] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-addpath /home/linuxbrew/.linuxbrew/opt/glibc/sbin PATH
-addpath /home/linuxbrew/.linuxbrew/opt/glibc/bin PATH
+addpath /home/linuxbrew/.linuxbrew/opt/glibc/sbin PATH 1
+addpath /home/linuxbrew/.linuxbrew/opt/glibc/bin PATH 1
+addpath /home/linuxbrew/.linuxbrew/opt/python/libexec/bin PATH 1
 addpath /home/linuxbrew/.linuxbrew/lib/ruby/gems/4.0.0/bin PATH 1
 addpath /home/linuxbrew/.linuxbrew/opt/rustup/bin PATH 1
 addpath /root/.bun/bin PATH 1

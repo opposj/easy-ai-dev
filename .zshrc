@@ -21,7 +21,7 @@ source <(fzf --zsh)
 eval "$(zoxide init zsh)"
 eval "$(starship init zsh)"
 
-[[ $BUILD_AGENT == forgecode ]] && { if [[ -z "$_FORGE_PLUGIN_LOADED" ]]; then eval "$(forge zsh plugin)"; fi; if [[ -z "$_FORGE_THEME_LOADED" ]]; then eval "$(forge zsh theme)"; fi }
+[[ $BUILD_AGENT == *forgecode* ]] && { if [[ -z "$_FORGE_PLUGIN_LOADED" ]]; then eval "$(forge zsh plugin)"; fi; if [[ -z "$_FORGE_THEME_LOADED" ]]; then eval "$(forge zsh theme)"; fi }
 
 bindkey '^U' backward-kill-line
 
