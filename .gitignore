@@ -1,2 +1,6 @@
 *~
 *.log
+misc
+.agents
+scripts/*
+!scripts/resolve-tier.zsh

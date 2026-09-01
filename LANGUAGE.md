@@ -40,6 +40,12 @@
 - **Style:** Interpreted
 - **stdin?** Yes — pipe is the run
 
+### JavaScript (Node.js)
+
+- **Command:** `echo 'console.log("Hello")' | node`
+- **Style:** JIT-compiled (V8)
+- **stdin?** Yes — pipe is the run
+
 ### TypeScript (Bun)
 
 - **Command:** `echo 'console.log("Hello")' | bun run -`
