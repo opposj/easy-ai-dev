@@ -6,6 +6,11 @@ addpath() {
 	return 1
 }
 
+put() {
+	local f="$1"; shift; mkdir -p "${f:h}"
+	if (($#)); then print -r -- "$*" > "$f"; else cat > "$f"; fi
+}
+
 source /root/.tier.env && export TUI LANGS AGENTS
 [[ -z $HOMEBREW_PREFIX ]] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 addpath /root/.local/bin PATH 1
