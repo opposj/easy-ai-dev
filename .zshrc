@@ -20,6 +20,7 @@ source "$ZSH/oh-my-zsh.sh"
 source <(fzf --zsh)
 eval "$(zoxide init zsh)"
 eval "$(starship init zsh)"
+eval "$(try init /root/src/tries)"
 
 [[ $AGENTS == *forgecode* ]] && { if [[ -z "$_FORGE_PLUGIN_LOADED" ]]; then eval "$(forge zsh plugin)"; fi; if [[ -z "$_FORGE_THEME_LOADED" ]]; then eval "$(forge zsh theme)"; fi }
 
