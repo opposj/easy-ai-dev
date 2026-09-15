@@ -1,5 +1,5 @@
 **Caveats:**
-1. `warp-agent-cli`/`muse-code`/`fx`/`devin`/`kiro`/`kimchi`/`replit-agent`/`amp`/`roo` does not support BYOK in a natural way
+1. `warp-agent-cli`/`muse-code`/`fx`/`devin`/`kiro`/`kimchi`/`replit-agent`/`amp`/`roo`/`traecode` does not support BYOK in a natural way
 2. `codewhale` suffers weird TUI input issue and cannot respond in interactive mode
 3. `antigravity-cli` may work if `configured with model mapping
 4. `prime-agent`/`deepagents` cannot be fully cached for Docker build
@@ -82,7 +82,7 @@
 
 - **Auth:** `KEY=<key>; MODEL=<model>; jq -n '{customModels:[{model:"'$MODEL'",displayName:"DeepSeek",baseUrl:"https://api.deepseek.com",apiKey:"'$KEY'",provider:"openai",maxOutputTokens:384000}]}' | put /root/.factory/settings.json`
 - **Headless:** `droid exec --skip-permissions-unsafe -r max -m "custom:DeepSeek-0" "Hello"`
-- **Interactive:** `droid` — Run a standalone auth first plus onboarding login; Use `/model` to switch models and set up effort level; `Ctrl-L` to cycle permission modes
+- **Interactive:** `droid` — Run a standalone auth first plus onboarding login; Use `/model` to switch models and set effort level; `Ctrl-L` to cycle permission modes
 
 ### goose
 
@@ -106,7 +106,13 @@
 
 - **Auth:** `KEY=<key>; MODEL=<model>; cline auth -p deepseek -k $KEY -m $MODEL`
 - **Headless:** `echo -n "Hello" | cline --auto-approve true --thinking xhigh`
-- **Interactive:** `cline` — Run a standalone auth first; Use `/model` to switch models and set up effort level; `Shift-Tab` to cycle permission modes
+- **Interactive:** `cline` — Run a standalone auth first; Use `/model` to switch models and set effort level; `Shift-Tab` to cycle permission modes
+
+### codebuddy
+
+- **Auth:** `KEY=<key>; MODEL=<model>; jq -n '{model:"'$MODEL'",reasoningEffort:"max",permissions:{defaultMode:"bypassPermissions"},trustAll:true,env:{CODEBUDDY_API_KEY:"'$KEY'",CODEBUDDY_BASE_URL:"https://api.deepseek.com"}}' | put /root/.codebuddy/settings.json`
+- **Headless:** `CODEBUDDY_IS_SANDBOX=1 codebuddy -y -p "Hello"`
+- **Interactive:** `codebuddy` — Run a standalone auth first; Use `/effort` to set effort level; `Shift-Tab` to cycle permission modes; No custom model switching?
 
 ### kilo
 
@@ -125,6 +131,12 @@
 - **Auth:** `KEY=<key>; MODEL=<model>; jq -n '{modelProviders:{anthropic:[{id:"'$MODEL'[1m]",name:"DeepSeek",baseUrl:"https://api.deepseek.com/anthropic",envKey:"ANTHROPIC_API_KEY",generationConfig:{contextWindowSize:1000000,modalities:{image:true},reasoning:{effort:"max"}}}]},env:{ANTHROPIC_API_KEY:"'$KEY'"},security:{auth:{selectedType:"anthropic"}},model:{name:"'$MODEL'[1m]"}}' | put /root/.qwen/settings.json`
 - **Headless:** `qwen --approval-mode yolo -p "Hello"`
 - **Interactive:** `qwen` — `/auth` to auth interactively; Use `/effort` to set effort level; `Shift-Tab` to cycle permission modes; Use `/model` to switch models
+
+### mcode
+
+- **Auth:** `KEY=<key>; MODEL=<model>; MCODE_PROVIDER_API_KEY=$KEY mcode provider add --name deepseek --base-url https://api.deepseek.com --api-format openai-responses --model $MODEL && mcode provider test deepseek && sed -i "s|^defaultModel:.*|defaultModel: custom_provider:deepseek/$MODEL|" /root/.minimax/config.yaml`
+- **Headless:** `mcode exec --permission full "Hello"`; No effect level option?
+- **Interactive:** `mcode` — `/model` to auth interactively and switch models; No effect level option?; `Alt-M` to cycle permission modes
 
 ### qoder
 
@@ -161,3 +173,9 @@
 - **Auth:** `KEY=<key>; MODEL=<model>; jq -n '{llm:{activeTextProvider:"deepseek",activeEmbeddingProvider:"deepseek",providers:[{id:"deepseek",kind:"openai-compatible",baseUrl:"https://api.deepseek.com",defaultChatModel:"'$MODEL'",maxOutputTokens:384000,extraBody:{reasoning_effort:"max"},userModels:[{id:"'$MODEL'",kind:"chat",contextWindow:1000000,supportsVision:true}]}]},analytics:{enabled:false}}' | put /root/.atomic-agent/config.json && printf "OPENAI_COMPAT_API_KEY=$KEY\nATOMIC_AGENT_UPDATE_CHECK_ON_STARTUP=false" | put /root/.atomic-agent/.env`
 - **Headless:** `echo "Hello" | atag run --no-approval` 
 - **Interactive:** `atag` — Run a standalone auth first; No effort level option?; Use `/mode` to change approval mode; Use `/model` to switch models
+
+### letta
+
+- **Auth:** `KEY=<key>; letta backend local && letta --backend local connect deepseek --api-key $KEY`
+- **Headless:** `MODEL=<model>; letta --ephemeral -p "Hello" --model deepseek/$MODEL` — Neither CLI effort nor bypass option?
+- **Interactive:** `letta` — `/connect` to auth interactively; Use `/model` to switch models and set effort level; `Shift-Tab` to cycle permission modes
