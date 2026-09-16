@@ -10,6 +10,12 @@
 - **Style:** Compiled, two-stage
 - **stdin?** Source via pipe, separate run
 
+### csharp
+
+- **Command:** `echo 'System.Console.WriteLine("Hello");' > /tmp/f.cs && dotnet run /tmp/f.cs`
+- **Style:** Compiled, one-stage (.NET 10+ file-based app)
+- **stdin?** No — needs `.cs` file
+
 ### rust
 
 - **Command:** `echo 'fn main(){println!("Hello")}' | rustc -C linker=gcc-16 -o t - && ./t`
@@ -52,11 +58,23 @@
 - **Style:** JIT-transpiled
 - **stdin?** Yes — stdin via `-`
 
+### deno
+
+- **Command:** `echo 'console.log("Hello")' | deno run -`
+- **Style:** JIT-compiled (V8)
+- **stdin?** Yes — stdin via `-`
+
 ### java
 
 - **Command:** `echo 'public class OneLine { public static void main(String[] args) { System.out.println("Hello"); } }' > OneLine.java && java OneLine.java`
 - **Style:** Compiled, one-stage (Java 11+ single-file source)
 - **stdin?** No — needs `.java` file
+
+### scala
+
+- **Command:** `scala -e 'println("Hello")'`
+- **Style:** Compiled (JVM), via `-e` snippet
+- **stdin?** No — source via `-e` flag
 
 ### lisp
 
@@ -69,6 +87,12 @@
 - **Command:** `echo '(println "Hello")' | clj`
 - **Style:** JIT-compiled, via REPL
 - **stdin?** Yes — pipe feeds REPL
+
+### ocaml
+
+- **Command:** `echo 'print_endline "Hello";;' | ocaml -stdin -no-version`
+- **Style:** Compiled, via toplevel script mode
+- **stdin?** Yes — `-stdin` reads the pipe as a script
 
 ### elixir
 

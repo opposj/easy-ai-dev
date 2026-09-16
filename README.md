@@ -42,7 +42,4 @@ docker build --build-arg TIER=lite --build-arg TUI=1 -t ai-dev:lite-tui .
 *Notes*
 
 1. `perl`, `c`, `c++`, `ruby` and `fortran` are always available; BTW, `ruby` is Homebrew's launcher
-2. `js`/`tsc` install a real `bun` + Node.js toolchain; I actually dislike `node`, however, it finally turns out that `bun` is not omnipotent everywhere
-3. `java` installs `openjdk` only, while `clojure`/`kotlin` brings `openjdk` along as its dependency; Similar thing happens to `elixir` who bundles `erlang`
-4. Agents declare their language dependencies; If interested, read `scripts/resolve-tier.zsh`
-5. For convenience, DeepSeek is assumed to be the provider for all agents
+2. For convenience, DeepSeek is assumed to be the provider for all agents
