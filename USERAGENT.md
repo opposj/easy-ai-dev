@@ -118,7 +118,7 @@
 
 - **Auth:** `KEY=<key>; zmx r tmp -d kilo auth login && sleep 5 && zmx s tmp deepseek$'\r' && sleep 2 && zmx s tmp $KEY$'\r' && sleep 10 && zmx k tmp`
 - **Headless:** `MODEL=<model>; kilo run -m deepseek/$MODEL --auto true --variant max "Hello"`
-- **Interactive:** `kilo` — `/connect` to auth interactively; `Ctrl-t` to cycle through effort levels; Use `/auth-approve` to toggle approval bypass; Use `/models` to switch models
+- **Interactive:** `kilo` — `/connect` to auth interactively; `Ctrl-T` to cycle through effort levels; Use `/auth-approve` to toggle approval bypass; Use `/models` to switch models
 
 ### kimi
 
@@ -178,4 +178,16 @@
 
 - **Auth:** `KEY=<key>; letta backend local && letta --backend local connect deepseek --api-key $KEY`
 - **Headless:** `MODEL=<model>; letta --ephemeral -p "Hello" --model deepseek/$MODEL` — Neither CLI effort nor bypass option?
-- **Interactive:** `letta` — `/connect` to auth interactively; Use `/model` to switch models and set effort level; `Shift-Tab` to cycle permission modes
+- **Interactive:** `letta` — `/connect` to auth interactively; Use `/model` to switch models and set effort level; `Shift+Tab` to cycle permission modes
+
+### zerostack
+
+- **Auth:** `KEY=<key>; MODEL=<model>; printf "provider: deepseek\nmodel: $MODEL\nmax_tokens: 384000\ncontext_window: 1000000\nshow_reasoning: true\nextra_body:\n  reasoning_effort: max\napi_keys:\n  deepseek: $KEY\ncustom_providers:\n  deepseek:\n    provider_type: openai\n    base_url: https://api.deepseek.com" | put /root/.config/zerostack/config.yaml`
+- **Headless:** `zerostack --dangerously-skip-permissions -p "Hello"` — No effort level option?
+- **Interactive:** `zerostack` — Run a standalone auth first; Use `/thinking` to set effort level; Use `/mode` to change approval mode; Use `/model` to switch models
+
+### mimo
+
+- **Auth:** `KEY=<key>; MODEL=<model>; jq -n '{model:"deepseek/'$MODEL'",provider:{deepseek:{name:"DeepSeek",npm:"@ai-sdk/openai-compatible",models:{"'$MODEL'":{name:"'$MODEL'",reasoning:true,interleaved:{field:"reasoning_content"},options:{reasoningEffort:"max"},limit:{context:1000000,output:384000}}},options:{baseURL:"https://api.deepseek.com",apiKey:"'$KEY'"}}}}' | put /root/.config/mimocode/mimocode.json`
+- **Headless:** `mimo run --variant max --dangerously-skip-permissions "Hello"`
+- **Interactive:** `mimo` — `/connect` to auth interactively; `Ctrl-T` to cycle through effort levels; Use `/skip-permissions` to toggle approval bypass; Use `/models` to switch models

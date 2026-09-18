@@ -14,6 +14,7 @@ put() {
 source /root/.tier.env && export TUI LANGS AGENTS
 [[ -z $HOMEBREW_PREFIX ]] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 addpath /root/.local/bin PATH 1
+addpath /root/.moon/bin PATH 1
 addpath /root/.bun/bin PATH 1
 addpath /home/linuxbrew/.linuxbrew/opt/glibc/sbin PATH 1
 addpath /home/linuxbrew/.linuxbrew/opt/glibc/bin PATH 1

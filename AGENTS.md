@@ -1,0 +1,4 @@
+- Never build image by yourself
+- `brew` first when adding new tools
+- Conform to existing code/docs standards
+- Never use `npm`, use `bun` instead

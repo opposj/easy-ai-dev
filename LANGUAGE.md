@@ -171,3 +171,9 @@
 - **Command:** `kotlin -e 'println("Hello")'`
 - **Style:** Compiled (JVM), via `-e` eval
 - **stdin?** No — source via `-e` flag
+
+### moonbit
+
+- **Command:** `moon new /tmp/m >/dev/null 2>&1 && moon -C /tmp/m run cmd/main`
+- **Style:** Compiled (Wasm), one-stage (run)
+- **stdin?** No — needs a project directory
