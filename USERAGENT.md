@@ -191,3 +191,9 @@
 - **Auth:** `KEY=<key>; MODEL=<model>; jq -n '{model:"deepseek/'$MODEL'",provider:{deepseek:{name:"DeepSeek",npm:"@ai-sdk/openai-compatible",models:{"'$MODEL'":{name:"'$MODEL'",reasoning:true,interleaved:{field:"reasoning_content"},options:{reasoningEffort:"max"},limit:{context:1000000,output:384000}}},options:{baseURL:"https://api.deepseek.com",apiKey:"'$KEY'"}}}}' | put /root/.config/mimocode/mimocode.json`
 - **Headless:** `mimo run --variant max --dangerously-skip-permissions "Hello"`
 - **Interactive:** `mimo` — `/connect` to auth interactively; `Ctrl-T` to cycle through effort levels; Use `/skip-permissions` to toggle approval bypass; Use `/models` to switch models
+
+### opensci
+
+- **Auth:** `KEY=<key>; MODEL=<model>; jq -n '{deepseek:{type:"api",key:"'$KEY'"}}' | put /root/.openscience/auth.json && jq -n '{model:"deepseek/'$MODEL'"}' | put /root/.config/openscience/openscience.json`
+- **Headless:** `openscience run --variant max --auto-approve "Hello"`
+- **Interactive:**  `openscience` — TUI unavailable; Default WebUI hosted in port 4096, which requires third-party OAuth
