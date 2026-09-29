@@ -4,3 +4,4 @@ misc
 .agents
 scripts/*
 !scripts/resolve-tier.zsh
+!scripts/test-resolve-tier.zsh
