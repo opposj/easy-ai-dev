@@ -19,9 +19,9 @@ Four build args control what goes into the image: `TIER` (cozy preset), `TUI` (i
 | TIER | TUI | LANGS | AGENTS |
 | - | - | - | - |
 | `full` (default) | 1 | all | all |
-| `pro` | 1 | python tsc go rust sql lua clojure lisp zig r | forgecode codex opencode pi crush jcode cline kilo omp |
-| `default` | 1 | python tsc go rust sql | forgecode codex opencode pi |
-| `lite` | 0 | python tsc | forgecode |
+| `pro` | 1 | python tsc go rust sql lua clojure lisp zig r | fx forgecode codex opencode pi crush jcode cline kilo omp |
+| `default` | 1 | python tsc go rust sql | fx forgecode codex opencode pi |
+| `lite` | 0 | python tsc | fx |
 | (empty) | 0 | — | — |
 
 - `TUI={0|1}` — With `1`, the modern interactive tool set is installed; With `0`, only the bare essentials

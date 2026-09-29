@@ -1,10 +1,9 @@
 **Caveats:**
-1. `warp-agent-cli`/`muse-code`/`fx`/`devin`/`kiro`/`kimchi`/`replit-agent`/`amp`/`roo`/`traecode` does not support BYOK in a natural way
+1. `warp-agent-cli`/`muse-code`/`devin`/`kiro`/`kimchi`/`replit-agent`/`amp`/`roo`/`traecode`/`gemini-cli`/`antigravity-cli` does not support BYOK in a natural way
 2. `codewhale` suffers weird TUI input issue and cannot respond in interactive mode
-3. `antigravity-cli` may work if `configured with model mapping
-4. `prime-agent`/`deepagents` cannot be fully cached for Docker build
-5. `zmx` auth is unstable, requiring further improvements
-6. `bub` is out of control given a simple "Hello"
+3. `prime-agent`/`deepagents`/`opensquilla` cannot be fully cached for Docker build
+4. `zmx` auth is unstable, requiring further improvements
+5. `bub` is out of control given a simple "Hello"
 
 ### forgecode
 
@@ -197,3 +196,15 @@
 - **Auth:** `KEY=<key>; MODEL=<model>; jq -n '{deepseek:{type:"api",key:"'$KEY'"}}' | put /root/.openscience/auth.json && jq -n '{model:"deepseek/'$MODEL'"}' | put /root/.config/openscience/openscience.json`
 - **Headless:** `openscience run --variant max --auto-approve "Hello"`
 - **Interactive:**  `openscience` — TUI unavailable; Default WebUI hosted in port 4096, which requires third-party OAuth
+
+### fx
+
+- **Auth:** `KEY=<key>; MODEL=<model>; export DEEPSEEK_API_KEY=$KEY; jq -n '{provider:"deepseek",providers:{deepseek:{protocol:"openai-chat-completions",base_url:"https://api.deepseek.com",auth:{type:"bearer",env:"DEEPSEEK_API_KEY"},model_metadata:{"'$MODEL'":{context_window:1000000,max_output_tokens:384000,supports_tool_use:true,supports_vision:true}}}},models:{deepseek:"'$MODEL'"}}' | put /root/.fx/settings.json`
+- **Headless:** `fx ask --full-access --effort max "Hello"`
+- **Interactive:**  `fx` — Run a standalone auth first; No effort level option?; `Shift-Tab` to cycle permission modes; Use `/model` to switch models
+
+### opensquilla
+
+- **Auth:** `KEY=<key>; MODEL=<model>; opensquilla onboard --provider deepseek --model $MODEL --api-key $KEY --minimal --router disabled`
+- **Headless:** `opensquilla agent --thinking max -m "Hello"`
+- **Interactive:** Not recommended to use TUI; To use WebUI, run `export OPENSQUILLA_AUTH_MODE=token OPENSQUILLA_AUTH_TOKEN=$(openssl rand -hex 32); opensquilla gateway start --json --bind 0.0.0.0; echo "http://127.0.0.1:18791/control/?token=$OPENSQUILLA_AUTH_TOKEN"`
