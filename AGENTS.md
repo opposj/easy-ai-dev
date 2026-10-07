@@ -2,3 +2,4 @@
 - `brew` first when adding new tools
 - Conform to existing code/docs standards
 - Never use `npm`, use `bun` instead
+- Prevent using `apt` if possible

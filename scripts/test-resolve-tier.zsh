@@ -5,7 +5,7 @@
 #   run:  zsh scripts/test-resolve-tier.zsh
 #
 # The resolver is invoked exactly as the Dockerfile `tier` stage does:
-#   zsh resolve-tier.zsh "$TIER" "$TUI" "$LANG" "$AGENT"
+#   zsh resolve-tier.zsh "$TIER" "$TUI" "$LANGS" "$AGENTS" "$TOOLS"
 #
 # The LANG_MAP at the top of the resolver is the source of truth: LANGS is
 # expressed in its KEYS (language names), LANG_FORMULAE in its VALUES
@@ -28,6 +28,14 @@
 #                    lua clojure lisp zig r                    crush jcode cline kilo omp
 #   full       1    all (node included, no bun->node shim)     all
 #
+#   TOOLS is an independent vocabulary, unseeded by TIER and deduplicated like
+#   the other lists. The only tool is the self-versioned `cuda`, whose version
+#   must be complete (<major>.<minor>.<patch>):
+#     cuda@13.4.2 -> CUDA_IMAGE=nvidia/cuda:13.4.2-devel-ubuntu24.04
+#     `cuda` without a version, an incomplete or non-numeric version, or any
+#     other token (including `all`) is fatal (rc 1, empty stdout); when two
+#     different cuda@ specs are given, the last one wins
+#
 #   Hard rules:
 #     - explicit TUI overrides the tier default
 #     - LANG/AGENT are merged on top of the tier and deduplicated
@@ -44,6 +52,11 @@
 #       `agent_env` stage matches on `" $LANGS "` with space padding)
 #     - QUICKLISP/ALIRE/MOONBIT are emitted as 0/1 flags (1 iff lisp/ada/moonbit
 #       in LANGS) so the Dockerfile needs no glob matching
+#     - TOOLS is echoed verbatim; CUDA_IMAGE stays empty unless cuda is
+#       requested (agent_env then streams that image with crane and installs
+#       the CUDA toolkit from it)
+#     - unlike LANGS/AGENTS, unknown TOOLS tokens fail the resolver instead of
+#       flowing through to the Dockerfile
 # -----------------------------------------------------------------------------
 
 typeset -gi PASS=0 FAIL=0
@@ -53,7 +66,7 @@ typeset -g RESOLVER=${0:A:h}/resolve-tier.zsh
 typeset -g ZSH_BIN=${commands[zsh]:-zsh}
 
 # --- pinned constants (space-joined) ----------------------------------------
-typeset -g CORE_EXP='iproute2 socat make jq ripgrep fd tgrep gh ruby unzip sevenzip file-formula vim neurosnap/tap/zmx mise gum bubblewrap'
+typeset -g CORE_EXP='iproute2 socat make jq ripgrep fd tgrep gh ruby unzip sevenzip file-formula vim neurosnap/tap/zmx mise gum bubblewrap crane pkgconf'
 typeset -g TUI_EXP='less rlwrap tmux zellij herdr hunk bat eza starship lazygit fastfetch fzf zoxide yazi tlrc bash-completion@2 wl-clipboard hyperfine man-db texinfo universal-ctags gdb ffmpeg-full imagemagick-full poppler resvg try yt-dlp'
 typeset -g ALL_LANG_EXP='ada c clojure cpp csharp dart deno elixir erlang fortran go java js julia kotlin lisp lua moonbit ocaml perl php python r ruby rust scala sql swift tsc zig'
 typeset -g ALL_AGENT_EXP='aider atomic claude cline codebuddy codex copilot crush deepagents deepcode droid forgecode fx goose grok hermes jcode kilo kimi letta mcode mimo omp opencode openhands opensci opensquilla pi prime qoder qwen reasonix tmuxai zerostack'
@@ -62,18 +75,19 @@ typeset -g FULL_LANG_F='clojure dotnet dart-sdk deno elixir erlang go openjdk bu
 # --- helpers -----------------------------------------------------------------
 norm() { print -r -- ${(j: :)${=${1//,/ }}} }   # canonical space-joined form
 
-# rt_run tier tui lang agent -> sets G_* globals
+# rt_run tier tui lang agent [tools] -> sets G_* globals
 rt_run() {
   G_ERRF=$TMP/rt.err.$$
-  G_OUT=$(zsh "$RESOLVER" "$1" "$2" "$3" "$4" 2>$G_ERRF)
+  G_OUT=$(zsh "$RESOLVER" "$1" "$2" "$3" "$4" "${5:-}" 2>$G_ERRF)
   G_RC=$?
   G_ERR=$(<$G_ERRF)
   rm -f $G_ERRF
-  local TUI LANGS AGENTS DEPS CORE_FORMULAE TUI_FORMULAE LANG_FORMULAE QUICKLISP ALIRE MOONBIT
+  local TUI LANGS AGENTS TOOLS CUDA_IMAGE DEPS CORE_FORMULAE TUI_FORMULAE LANG_FORMULAE QUICKLISP ALIRE MOONBIT
   eval "$G_OUT"
-  G_TUI=$TUI G_LANGS=$LANGS G_AGENTS=$AGENTS G_DEPS=$DEPS
+  G_TUI=$TUI G_LANGS=$LANGS G_AGENTS=$AGENTS G_TOOLS=$TOOLS G_DEPS=$DEPS
   G_CORE=$CORE_FORMULAE G_TUIF=$TUI_FORMULAE G_LANGF=$LANG_FORMULAE
   G_QUICKLISP=$QUICKLISP G_ALIRE=$ALIRE G_MOONBIT=$MOONBIT
+  G_CUDA_IMAGE=$CUDA_IMAGE
 }
 
 ok()   { ((PASS++)) }
@@ -84,10 +98,10 @@ cmp() { # label expected actual  (content compare, separator-normalised)
   if [[ $e == $a ]]; then ok; else bad "$label" "$e" "$a"; fi
 }
 
-# verify tier tui lang agent exp_tui exp_langs exp_agents exp_deps exp_tuif exp_langf
+# verify tier tui lang agent exp_tui exp_langs exp_agents exp_deps exp_tuif exp_langf [tools] [exp_cuda_image] [exp_tools]
 verify() {
   local name=${funcstack[2]}
-  rt_run "$1" "$2" "$3" "$4"
+  rt_run "$1" "$2" "$3" "$4" "${11:-}"
 
   (( G_RC == 0 )) || bad "$name rc" 0 $G_RC
   [[ -z $G_ERR ]] || bad "$name stderr" '<empty>' "$G_ERR"
@@ -119,14 +133,29 @@ verify() {
   cmp "$name ALIRE" "$exp_al" "$G_ALIRE"
   cmp "$name MOONBIT" "$exp_mb" "$G_MOONBIT"
 
+  # tool selection: TOOLS is compared in its deduplicated form ($13, defaults
+  # to the raw input $11); the cuda spec expands into CUDA_IMAGE
+  cmp "$name TOOLS"      "${13:-${11:-}}" "$G_TOOLS"
+  cmp "$name CUDA_IMAGE" "${12:-}" "$G_CUDA_IMAGE"
+
   # dedupe invariant: no list may repeat an entry
   local v
-  for v in G_LANGS G_AGENTS G_DEPS G_TUIF G_LANGF G_CORE; do
+  for v in G_LANGS G_AGENTS G_TOOLS G_DEPS G_TUIF G_LANGF G_CORE; do
     local -a arr uniq
     arr=(${(P)v})
     uniq=(${(u)arr})
     if (( ${#arr} == ${#uniq} )); then ok; else ((FAIL++)); print -r -- "FAIL $name duplicates in $v: [${arr[*]}]"; fi
   done
+}
+
+# verify_error tier tui lang agent tools exp_rc exp_msg — fatal paths must
+# exit non-zero, explain themselves on stderr and emit nothing usable on stdout
+verify_error() {
+  local name=${funcstack[2]}
+  rt_run "$1" "$2" "$3" "$4" "$5"
+  (( G_RC == $6 )) || bad "$name rc" $6 $G_RC
+  [[ $G_ERR == *"$7"* ]] || bad "$name stderr" "*$7*" "$G_ERR"
+  [[ -z $G_OUT ]] || bad "$name stdout" '<empty>' "$G_OUT"
 }
 
 # --- tiers -------------------------------------------------------------------
@@ -202,6 +231,25 @@ t_agent_all_on_default(){ verify default '' '' all 1 'python tsc go rust sql' 'f
 t_agent_bogus()         { verify '' '' '' bogus 0 '' bogus '' '' '' }
 t_agent_everything_deprecated() { verify '' '' '' everything 0 '' everything '' '' '' }
 
+# --- TOOLS: self-versioned cuda tool (spec -> CUDA_* contract) ----------------
+t_cuda()                 { verify '' '' '' '' 0 '' '' '' '' '' cuda@13.4.2 nvidia/cuda:13.4.2-devel-ubuntu24.04 }
+t_cuda_12()              { verify '' '' '' '' 0 '' '' '' '' '' cuda@12.9.1 nvidia/cuda:12.9.1-devel-ubuntu24.04 }
+t_cuda_patch_zero()      { verify '' '' '' '' 0 '' '' '' '' '' cuda@13.3.0 nvidia/cuda:13.3.0-devel-ubuntu24.04 }
+t_cuda_dedupe()          { verify '' '' '' '' 0 '' '' '' '' '' 'cuda@13.4.2,cuda@13.4.2' nvidia/cuda:13.4.2-devel-ubuntu24.04 cuda@13.4.2 }
+t_cuda_comma()           { verify '' '' '' '' 0 '' '' '' '' '' 'cuda@13.4.2, cuda@13.4.2' nvidia/cuda:13.4.2-devel-ubuntu24.04 cuda@13.4.2 }
+t_cuda_with_tier()       { verify lite '' '' '' 0 'python tsc' fx '' '' 'uv python bun node' cuda@12.9.1 nvidia/cuda:12.9.1-devel-ubuntu24.04 }
+t_cuda_with_lang_agent() { verify '' '' lisp pi 0 lisp pi node '' sbcl cuda@13.4.2 nvidia/cuda:13.4.2-devel-ubuntu24.04 }
+t_cuda_with_bare_lang()  { verify '' '' 'python c' '' 0 'python c' '' '' '' 'uv python' cuda@13.4.2 nvidia/cuda:13.4.2-devel-ubuntu24.04 }
+t_cuda_missing_version() { verify_error '' '' '' '' cuda 1 'Illegal CUDA version' }
+t_cuda_empty_version()   { verify_error '' '' '' '' 'cuda@' 1 'Illegal CUDA version' }
+t_cuda_incomplete()      { verify_error '' '' '' '' cuda@13.4 1 'Illegal CUDA version' }
+t_cuda_extra_part()      { verify_error '' '' '' '' cuda@13.4.2.1 1 'Illegal CUDA version' }
+t_cuda_non_numeric()     { verify_error '' '' '' '' cuda@latest 1 'Illegal CUDA version' }
+t_cuda_last_wins()       { verify '' '' '' '' 0 '' '' '' '' '' 'cuda@13.4.2 cuda@12.9.1' nvidia/cuda:12.9.1-devel-ubuntu24.04 }
+t_tools_unknown()        { verify_error '' '' '' '' vulkan 1 'Unknown tool: vulkan' }
+t_tools_unknown_mixed()  { verify_error '' '' '' '' 'cuda@13.4.2,vulkan' 1 'Unknown tool: vulkan' }
+t_tools_all_rejected()   { verify_error '' '' '' '' all 1 'Unknown tool: all' }
+
 # --- unknown tier -------------------------------------------------------------
 t_tier_unknown()          { verify garbage '' '' '' 0 '' '' '' '' '' }
 t_tier_unknown_merged()   { verify garbage '' php pi 0 php pi node '' php }
@@ -219,6 +267,10 @@ main() {
     t_agent_dedupe t_agent_merge_pi t_agent_merge_comma t_agent_node_deps t_agent_bun_deps
     t_agent_mcode t_agent_mimo t_agent_codebuddy t_agent_prime t_agent_uv_deps t_agent_mixed t_agent_atomic t_agent_letta t_agent_zerostack t_agent_opensci t_agent_fx t_agent_opensquilla t_agent_all t_agent_all_on_default
     t_agent_bogus t_agent_everything_deprecated
+    t_cuda t_cuda_12 t_cuda_patch_zero t_cuda_dedupe t_cuda_comma
+    t_cuda_with_tier t_cuda_with_lang_agent t_cuda_with_bare_lang
+    t_cuda_missing_version t_cuda_empty_version t_cuda_incomplete t_cuda_extra_part t_cuda_non_numeric t_cuda_last_wins
+    t_tools_unknown t_tools_unknown_mixed t_tools_all_rejected
     t_tier_unknown t_tier_unknown_merged t_tier_unknown_tui_on
   )
   local t

@@ -12,9 +12,9 @@
 
 ### Build Arguments
 
-Four build args control what goes into the image: `TIER` (cozy preset), `TUI` (interactive/headless tool set), `LANGS` (languages), and `AGENTS` (agents)
+Five build args control what goes into the image: `TIER` (cozy preset), `TUI` (interactive/headless tool set), `LANGS` (languages), `AGENTS` (agents), and `TOOLS` (extra dev tools)
 
-`TIER` seeds defaults for the other three; Explicit args merge on top of the tier; `TUI` overrides, `LANGS`/`AGENTS` append, and every list is deduplicated before installation:
+`TIER` seeds defaults for the other three; Explicit args merge on top of the tier; `TUI` overrides, `LANGS`/`AGENTS`/`TOOLS` append, and every list is deduplicated before installation:
 
 | TIER | TUI | LANGS | AGENTS |
 | - | - | - | - |
@@ -27,6 +27,7 @@ Four build args control what goes into the image: `TIER` (cozy preset), `TUI` (i
 - `TUI={0|1}` — With `1`, the modern interactive tool set is installed; With `0`, only the bare essentials
 - `LANGS` — Comma separated language tokens; See `LANGUAGE.md`
 - `AGENTS` — Comma separated agents; See `USERAGENT.md`
+- `TOOLS` — Comma separated extra dev tools; See `EXTOOL.md`
 
 *Examples*
 
@@ -37,6 +38,7 @@ docker build --build-arg TIER= -t ai-dev:bare .
 docker build --build-arg TIER=default --build-arg LANGS=lisp,zig -t ai-dev:custom-langs .
 docker build --build-arg TIER=default --build-arg AGENTS=crush,cline -t ai-dev:custom-agents . 
 docker build --build-arg TIER=lite --build-arg TUI=1 -t ai-dev:lite-tui .
+docker build --build-arg TOOLS=cuda@13.4.2 -t ai-dev:cuda .
 ```
 
 *Notes*
