@@ -1,5 +1,5 @@
 **Caveats:**
-1. `warp-agent-cli`/`muse-code`/`devin`/`kiro`/`kimchi`/`replit-agent`/`amp`/`roo`/`traecode`/`gemini-cli`/`antigravity-cli` does not support BYOK in a natural way
+1. `warp-agent-cli`/`muse-code`/`devin`/`kiro`/`kimchi`/`replit-agent`/`amp`/`roo`/`traecode`/`gemini-cli`/`antigravity-cli`/`augment` does not support BYOK in a natural way
 2. `codewhale` suffers weird TUI input issue and cannot respond in interactive mode
 3. `prime-agent`/`deepagents`/`opensquilla` cannot be fully cached for Docker build
 4. `zmx` auth is unstable, requiring further improvements
